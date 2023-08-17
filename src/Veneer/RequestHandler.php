@@ -74,8 +74,8 @@ class RequestHandler
         
         // Initialize the Gapic classes and store them in memory
         $this->gapics = [];
-        foreach($gapicClasses as $cls => $_) {
-            $this->gapics[$cls] = new $cls($config);
+        foreach($gapicClasses as $cls => $obj) {
+            $this->gapics[$cls] = is_object($obj) ? $obj : new $cls($config);
         }
     }
 
