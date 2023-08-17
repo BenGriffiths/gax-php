@@ -32,19 +32,19 @@ class RequestHandler
      */
     private $clientConfig;
 
-    private $serializer;
+    private $gapics;
 
     /**
      * @param array $config
      */
     public function __construct(
         Serializer $serializer,
+        array $gapicClasses,
         array $config = []
     ) {
         //@codeCoverageIgnoreStart
 
         $config['serializer'] = $serializer;
-        $this->serializer = $serializer;
         $config += ['emulatorHost' => null];
         // TODO: We should be able to swap out the use of
         // GrpcRequestWrapper with either something in gax, or
@@ -71,22 +71,29 @@ class RequestHandler
         //@codeCoverageIgnoreEnd
 
         $this->clientConfig = $grpcConfig;
+        
+        // Initialize the Gapic classes and store them in memory
+        $this->gapics = [];
+        foreach($gapicClasses as $cls) {
+            $this->gapics[$cls] = new $cls($config);
+        }
     }
 
     /**
      * Helper function that forwards the request to a gapic client obj.
      * 
-     * @param $gapicObj The request will be forwarded to this constructed GAPIC object.
+     * @param $gapicClassOrObj The request will be forwarded to this GAPIC.
      * @param $method This method needs to be called on the gapic obj.
      * @param $requiredArgs The positional arguments to be passed on the $method
      * @param $args The optional args.
      * 
-     * TODO: Probably we can have the $gapicClass as the last param which is null
-     * only in cases where the resource only interacts with only one GAPIC
-     * and therefore, only one GAPIC was passed in the constructor
+     * If a GAPIC class is provided as the first argument,
+     * then the GAPIC object already stored in memory is used.
+     * If a GAPIC object is supplied,then we use the object as is.
+     * This is useful to override the GAPIC object used for one specific request.
      */
     public function sendReq(
-        $gapicObj,
+        $gapicClassOrObj,
         string $method,
         array $requiredArgs,
         array $optionalArgs,
@@ -96,12 +103,29 @@ class RequestHandler
 
         // we send the optional args in the end, because everything before that is
         // passed on the the `$method` as a positional argument
-        // TODO: If we merge the GrpcRequestWrapper funcationality here,
+        // TODO: If we merge the RequestWrapper funcationality here,
         // we can modify this behaviour
         $allArgs[] = $optionalArgs;
 
+        $gapicObj = $this->getGapicObj($gapicClassOrObj);
+
         // TODO: check how can we simplify the use of $whitelisted
         return $this->send([$gapicObj, $method], $allArgs, $whitelisted);
+    }
+
+    /**
+     * Helper function that returns a GAPIC object stored in memory
+     * using the GAPIC class as key.
+     * Alternatively, if a GAPIC object is supplied, then that object is returned
+     * as is.
+     */
+    private function getGapicObj($gapicClassOrObj) {
+        if (is_object($gapicClassOrObj))
+        {
+            return $gapicClassOrObj;
+        }
+
+        return $this->gapics[$gapicClassOrObj];
     }
 
     private function getDefaultTransport()
